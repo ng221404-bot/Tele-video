@@ -1,6 +1,6 @@
 import logging
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
@@ -22,10 +22,11 @@ def main():
     init_db()
     
     if not BOT_TOKEN:
-        print("Error: BOT_TOKEN not found in environment variables.")
+        logging.error("BOT_TOKEN not found in environment variables.")
         return
 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    # Build the application
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Conversation Handler for both User and Admin flows
     conv_handler = ConversationHandler(
@@ -62,10 +63,10 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_callback, pattern="^approve_|^reject_"))
     application.add_handler(CallbackQueryHandler(get_file_callback, pattern="^get_file$"))
     
-    # Add handler for admin SMS digits (from existing code)
+    # Add handler for admin SMS digits
     application.add_handler(CallbackQueryHandler(admin_sms_handler, pattern="^admin_sms_"))
 
-    print("Bot is running...")
+    logging.info("Bot is starting...")
     application.run_polling()
 
 if __name__ == '__main__':
