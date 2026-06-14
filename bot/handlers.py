@@ -10,24 +10,39 @@ from .database import get_db_connection
 # --- User Flow ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = get_db_connection()
-    user = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
-    
-    if not user or not user['is_verified']:
-        await update.message.reply_photo(
-            photo=WELCOME_IMAGE_URL,
-            caption=WELCOME_CAPTION,
-            reply_markup=get_welcome_keyboard(),
-            parse_mode='Markdown'
-        )
-        return START
-    else:
-        await update.message.reply_text(
-            "Welcome back! ✨\nTap below to get your next file.",
-            reply_markup=get_get_file_keyboard()
-        )
-        return ConversationHandler.END
+    try:
+        user_id = update.effective_user.id
+        logging.info(f"Start command received from user: {user_id}")
+        conn = get_db_connection()
+        user = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        
+        if not user or not user['is_verified']:
+            logging.info(f"User {user_id} not verified, sending welcome message.")
+            try:
+                await update.message.reply_photo(
+                    photo=WELCOME_IMAGE_URL,
+                    caption=WELCOME_CAPTION,
+                    reply_markup=get_welcome_keyboard(),
+                    parse_mode='Markdown'
+                )
+            except Exception as photo_err:
+                logging.error(f"Error sending photo: {photo_err}. Falling back to text.")
+                await update.message.reply_text(
+                    text=WELCOME_CAPTION,
+                    reply_markup=get_welcome_keyboard(),
+                    parse_mode='Markdown'
+                )
+            return START
+        else:
+            logging.info(f"User {user_id} is verified, sending Get File button.")
+            await update.message.reply_text(
+                "Welcome back! ✨\nTap below to get your next file.",
+                reply_markup=get_get_file_keyboard()
+            )
+            return ConversationHandler.END
+    except Exception as e:
+        logging.error(f"Error in start handler: {e}")
+        await update.message.reply_text("Something went wrong. Please try again later. ⚠️")
 
 async def proceed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

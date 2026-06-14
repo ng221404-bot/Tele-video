@@ -62,6 +62,11 @@ def main():
     application.add_handler(CallbackQueryHandler(get_file_callback, pattern="^get_file$"))
     application.add_handler(CallbackQueryHandler(admin_sms_handler, pattern="^admin_sms_"))
 
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logging.error(f"Exception while handling an update: {context.error}")
+
+    application.add_error_handler(error_handler)
+
     logging.info("Bot is starting on stable environment...")
     application.run_polling(drop_pending_updates=True)
 
