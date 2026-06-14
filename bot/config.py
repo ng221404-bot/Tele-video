@@ -29,10 +29,19 @@ INVALID_CODE_MSG = "❌ *Invalid Access Code*\n\nPlease try again or contact sup
 WAITING_FOR_ADMIN_MSG = "📩 A secure access code will be sent shortly by the admin."
 ENTER_CODE_MSG = "⌨️ *Enter Access Code*\n\nPlease use the buttons below to enter the 4-digit code."
 
+# Admin Secret Key
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "admin123")
+
 # States
 (
     START,
     AWAITING_CONTACT,
     AWAITING_CODE,
-    ADMIN_CONFIRMATION
-) = range(4)
+    ADMIN_CONFIRMATION,
+    ADMIN_AUTH,
+    ADMIN_PANEL,
+    UPLOAD_FILE,
+    SET_COOLDOWN,
+    SET_AUTO_DELETE,
+    RENAME_FILE
+) = range(10)
