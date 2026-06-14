@@ -1,116 +1,66 @@
-# Telegram Secure Access Verification Bot
+# 🚀 Telegram File Drip Bot
 
-This is a premium Telegram bot designed for secure manual access verification. It features an animated user experience, inline keyboard input for access codes, and a robust admin approval system.
+A premium Telegram bot designed to deliver files (videos, photos, documents) in a sequence with controlled cooldowns, verification systems, and advanced admin management.
 
-## Features
+## ✨ Features
 
-*   **Premium Welcome**: Custom welcome image and caption in multiple languages.
-*   **Automated Proceed**: Seamless user flow to initiate verification.
-*   **Secure Contact Sharing**: Users share their Telegram phone number securely.
-*   **Admin Notification**: Admin receives user details and verification requests.
-*   **Animated Messages**: Smooth, waiting-style animated messages during verification steps.
-*   **Manual Code Entry**: Users enter a secure access code via an inline numeric keypad.
-*   **Admin Approval**: Admin manually approves or rejects access codes.
-*   **Access Grant/Denial**: Clear feedback to the user upon verification outcome.
-*   **Multi-user State Management**: Handles multiple concurrent verification flows.
-*   **Scalable Architecture**: Designed for future expansion and integration with other bots.
+### 👤 User Features
+- **Premium Verification:** Users must verify their identity via phone number sharing.
+- **Drip Delivery:** Files are sent one by one in a specific sequence.
+- **Cooldown System:** Intelligent waiting period between files (Individual or Global).
+- **Auto-Delete:** Files automatically disappear after a set time to maintain privacy/exclusivity.
+- **Content Protection:** Files can be restricted to prevent forwarding or saving.
+- **Status Alerts:** Instant feedback on remaining cooldown time.
 
-## Technical Stack
+### 🛠 Admin Features (`/adm`)
+- **Secure Access:** Protected by a secret key system.
+- **File Management:**
+  - **Upload:** Send any file type (Video, Photo, Document).
+  - **Rename:** Update file captions anytime.
+  - **Reorder:** Move files up or down in the sequence.
+  - **Delete:** Remove files and auto-reorder the list.
+- **Per-File Settings:**
+  - Custom Cooldown (1h, 6h, 12h, 24h, or Custom).
+  - Toggle Content Protection (ON/OFF).
+  - Custom Auto-Delete timer.
+- **Global Settings:** Set a fallback cooldown for all files.
+- **Live Stats:** Track total users, verified members, and total files.
 
-*   **Language**: Python
-*   **Bot Framework**: `python-telegram-bot`
-*   **Environment Management**: `python-dotenv`
+## 🛠 Setup & Installation
 
-## Project Structure
+### 1. Prerequisites
+- Python 3.8+
+- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
 
+### 2. Environment Variables
+Create a `.env` file in the root directory:
+```env
+BOT_TOKEN=your_bot_token_here
+ADMIN_CHAT_ID=your_telegram_id
+ADMIN_SECRET=admin123
+WELCOME_IMAGE_URL=https://your-image-url.com
 ```
-Telebot-verification-/
-├── bot/
-│   ├── config.py               # Configuration settings (API tokens, admin IDs, messages)
-│   ├── handlers.py             # Defines all bot command and message handlers
-│   ├── keyboards.py            # Generates inline and reply keyboards
-│   ├── main.py                 # Entry point for the bot
-│   └── utils.py                # Utility functions (e.g., animated messages, message editing)
-├── .env.example                # Example environment variables file
-├── .gitignore                  # Git ignore file
-├── LICENSE                     # Project license file
-├── README.md                   # Project README with setup and usage instructions
-└── requirements.txt            # Python dependencies
-```
 
-## Setup and Installation
-
-### 1. Clone the Repository
-
+### 3. Install Dependencies
 ```bash
-git clone https://github.com/ng221404-bot/Telebot-verification-.git
-cd Telebot-verification-
-```
-
-### 2. Create a Telegram Bot
-
-1.  Talk to the BotFather on Telegram (`@BotFather`).
-2.  Use the `/newbot` command to create a new bot.
-3.  Follow the instructions to set up a name and username for your bot.
-4.  BotFather will give you an **API Token**. Keep this token secure.
-
-### 3. Get Your Admin Chat ID
-
-1.  Start a chat with your new bot.
-2.  Forward any message from yourself to the `userinfobot` (`@userinfobot`).
-3.  The `userinfobot` will provide your `Chat ID`. This will be your `ADMIN_CHAT_ID`.
-    * If you want to use a private group as admin chat, add your bot to the group and make it an administrator. Then, send any message to the group and forward it to `@userinfobot` to get the group's chat ID.
-
-### 4. Environment Variables
-
-Create a `.env` file in the root directory of the project based on the `.env.example` file:
-
-```dotenv
-BOT_TOKEN="YOUR_TELEGRAM_BOT_API_TOKEN"
-ADMIN_CHAT_ID="YOUR_ADMIN_CHAT_ID"
-WELCOME_IMAGE_URL="https://example.com/your_welcome_image.jpg" # Optional: URL for the welcome image
-```
-
-Replace the placeholder values with your actual bot token, admin chat ID, and optionally, a URL for your welcome image.
-
-### 5. Install Dependencies
-
-It's recommended to use a virtual environment:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: `venv\Scripts\activate`
 pip install -r requirements.txt
 ```
 
-### 6. Run the Bot
-
+### 4. Run the Bot
 ```bash
-python3 bot/main.py
+python bot.py
 ```
 
-Your bot should now be running and ready to receive messages!
+## 📂 Project Structure
+- `bot/main.py`: Entry point and handler registration.
+- `bot/handlers.py`: Core logic for user and admin flows.
+- `bot/database.py`: SQLite database schema and connection management.
+- `bot/keyboards.py`: All inline and reply keyboard structures.
+- `bot/config.py`: Configuration and state management.
 
-## Usage
+## 📝 Admin Commands
+- `/adm`: Open the admin authentication prompt.
+- Use the secret key set in `.env` to unlock the panel.
 
-1.  **Start the Bot**: Send `/start` to your bot.
-2.  **Proceed**: Click the "Proceed Automatically" button.
-3.  **Share Contact**: Share your phone number when prompted.
-4.  **Admin Action**: The admin will receive a notification and can send a secure code to the user.
-5.  **Enter Code**: The user enters the secure code using the inline keypad.
-6.  **Verification**: The admin approves or rejects the entered code.
-7.  **Access Granted/Denied**: The user receives feedback.
-
-## Extending the Bot
-
-*   **State Management**: For persistent user states beyond a single session, consider integrating a database (e.g., SQLite, PostgreSQL) instead of in-memory storage.
-*   **Premium Features**: Integrate your premium features/tools to be unlocked upon successful verification.
-*   **Multi-bot Integration**: The core verification logic is designed to be reusable. You can integrate this `bot` directory as a module into other Telegram bot projects.
-
-## Contributing
-
-Feel free to fork the repository, make improvements, and submit pull requests.
-
-## License
-
-This project is open-source and available under the MIT License.
+## 📜 License
+MIT License. Feel free to use and modify!
