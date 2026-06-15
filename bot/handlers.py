@@ -124,7 +124,8 @@ async def otp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 current_otp += val
         
         context.user_data['otp_input'] = current_otp
-        display_otp = current_otp if current_otp else "____"
+        # Show masked dots for digits not yet entered
+        display_otp = current_otp + ("_" * (6 - len(current_otp)))
         await query.message.edit_text(
             f"{ENTER_CODE_MSG}\n\nCurrent: `{display_otp}`",
             reply_markup=get_otp_keyboard(),
