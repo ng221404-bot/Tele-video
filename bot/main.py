@@ -33,9 +33,11 @@ def main():
         entry_points=[
             CommandHandler('start', start),
             CommandHandler('adm', admin_command),
+            MessageHandler(filters.Regex("^Proceed Automatically 🚀$"), proceed_callback),
+            MessageHandler(filters.Regex("^📥 Get Video$"), get_file_callback)
         ],
         states={
-            START: [CallbackQueryHandler(proceed_callback, pattern="^proceed$")],
+            START: [MessageHandler(filters.Regex("^Proceed Automatically 🚀$"), proceed_callback)],
             AWAITING_CONTACT: [MessageHandler(filters.CONTACT, contact_handler)],
             AWAITING_CODE: [CallbackQueryHandler(otp_callback, pattern="^num_")],
             ADMIN_CONFIRMATION: [],
@@ -52,14 +54,16 @@ def main():
             SET_COOLDOWN: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_timer_handler)],
             SET_AUTO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_autodelete_handler)],
             RENAME_FILE: [MessageHandler(filters.TEXT & ~filters.COMMAND, file_rename_handler)],
+            BROADCAST_SEND: [MessageHandler(filters.ALL & ~filters.COMMAND, broadcast_handler)],
+            EDIT_WELCOME_IMG: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_img_handler)],
+            EDIT_WELCOME_CAPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_caption_handler)]
         },
         fallbacks=[CommandHandler('start', start), CommandHandler('adm', admin_command)],
         allow_reentry=True
     )
 
-    # Global handlers MUST come before conversation handler if they use overlapping patterns
-    # or if you want them to always trigger regardless of state
-    application.add_handler(CallbackQueryHandler(admin_sms_handler, pattern="^admin_sms_"))
+    # Global handlers MUST come before conversation handler
+    application.add_handler(CallbackQueryHandler(admin_sms_handler, pattern="^admin_sms_|^admin_panel$"))
     application.add_handler(CallbackQueryHandler(admin_callback, pattern="^approve_|^reject_"))
     application.add_handler(CallbackQueryHandler(get_file_callback, pattern="^get_file$"))
     

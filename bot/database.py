@@ -40,9 +40,22 @@ def init_db():
     )
     ''')
     
-    # Default global cooldown (1 hour)
+    # Broadcast log table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS broadcast_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sent_at DATETIME,
+        success_count INTEGER,
+        fail_count INTEGER
+    )
+    ''')
+    
+    # Default global settings
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('global_cooldown', '3600')")
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_secret', 'admin123')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('welcome_img', 'https://via.placeholder.com/800x400?text=Premium+Verification')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('welcome_caption', 'Welcome to the most advanced bot! 🚀\nPlease verify yourself to continue.')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('skip_timer_link', 'https://t.me/your_channel')")
     
     conn.commit()
     conn.close()
