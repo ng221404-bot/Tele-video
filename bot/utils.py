@@ -24,9 +24,20 @@ async def animate_message(update: Update, context: ContextTypes.DEFAULT_TYPE, me
 
 async def send_to_admin(context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
     """Sends a message to the admin chat."""
-    await context.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=text,
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+    import logging
+    try:
+        # Ensure ADMIN_CHAT_ID is an integer if it's a numeric string
+        admin_id = ADMIN_CHAT_ID
+        if isinstance(admin_id, str) and (admin_id.startswith('-') or admin_id.isdigit()):
+            admin_id = int(admin_id)
+            
+        logging.info(f"Attempting to send admin notification to: {admin_id}")
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        logging.info("Admin notification sent successfully.")
+    except Exception as e:
+        logging.error(f"FAILED to send admin notification to {ADMIN_CHAT_ID}: {e}")
