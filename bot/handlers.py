@@ -65,6 +65,12 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         logging.info(f"Contact received from user {user.id}: {contact.phone_number}")
         
+        # Auto-delete the contact message for a clean UI
+        try:
+            await update.message.delete()
+        except Exception as e:
+            logging.error(f"Failed to delete contact message: {e}")
+            
         conn = get_db_connection()
         conn.execute("INSERT OR IGNORE INTO users (user_id, phone) VALUES (?, ?)", (user.id, contact.phone_number))
         conn.commit()
@@ -141,6 +147,12 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "admin_panel":
         await query.message.reply_text("🔑 Please enter the Admin Secret Key:")
         return ADMIN_AUTH
+    
+    if data.startswith("msg_user_"):
+        user_id = int(data.split("_")[2])
+        context.user_data['msg_target_user'] = user_id
+        await query.message.reply_text(f"💬 Send the message (Text, Photo, or Video) you want to send to User {user_id}:")
+        return ADMIN_MSG_USER_CONTENT
         
     user_id = int(data.split("_")[1])
     conn = get_db_connection()
@@ -272,9 +284,13 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.edit_text("📢 Send the message (Text, Photo, or Video) you want to broadcast to ALL users:")
         return BROADCAST_SEND
 
-    elif data == "admin_edit_welcome":
+    elif data == "admin_edit_welcome_img":
         await query.message.edit_text("🖼 Send or Upload the NEW Welcome Image/Photo:")
         return EDIT_WELCOME_IMG
+    
+    elif data == "admin_edit_welcome_text":
+        await query.message.edit_text("📝 Send the NEW Welcome Caption/Text:")
+        return EDIT_WELCOME_CAPTION
 
     elif data == "admin_global_cooldown":
         await query.message.edit_text("⏱ Select Global Cooldown Time:", reply_markup=get_timer_options_keyboard())
@@ -343,7 +359,21 @@ async def edit_welcome_caption_handler(update: Update, context: ContextTypes.DEF
     conn = get_db_connection()
     conn.execute("UPDATE settings SET value = ? WHERE key = 'welcome_caption'", (new_caption,))
     conn.commit()
-    await update.message.reply_text("✅ Welcome Caption updated!", reply_markup=get_admin_main_keyboard())
+    await update.message.reply_text("✅ Welcome Caption updated!")
+    return ADMIN_PANEL
+
+async def admin_msg_user_content_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_user_id = context.user_data.get('msg_target_user')
+    if not target_user_id:
+        await update.message.reply_text("❌ User ID not found.")
+        return ADMIN_PANEL
+    
+    try:
+        await update.message.copy(chat_id=target_user_id)
+        await update.message.reply_text(f"✅ Message sent to User {target_user_id}!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed to send message: {e}")
+        
     return ADMIN_PANEL
 
 async def file_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

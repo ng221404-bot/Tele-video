@@ -55,7 +55,8 @@ def main():
             RENAME_FILE: [MessageHandler(filters.TEXT & ~filters.COMMAND, file_rename_handler)],
             BROADCAST_SEND: [MessageHandler(filters.ALL & ~filters.COMMAND, broadcast_handler)],
             EDIT_WELCOME_IMG: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, edit_welcome_img_handler)],
-            EDIT_WELCOME_CAPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_caption_handler)]
+            EDIT_WELCOME_CAPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_welcome_caption_handler)],
+            ADMIN_MSG_USER_CONTENT: [MessageHandler(filters.ALL & ~filters.COMMAND, admin_msg_user_content_handler)]
         },
         fallbacks=[CommandHandler('start', start), CommandHandler('adm', admin_command)],
         allow_reentry=True

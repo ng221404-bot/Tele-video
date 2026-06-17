@@ -22,10 +22,16 @@ def get_otp_keyboard(current_code=""):
     return InlineKeyboardMarkup(keyboard)
 
 def get_admin_approval_keyboard(user_id):
-    keyboard = [[
-        InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
-        InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
-    ]]
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
+        ],
+        [
+            InlineKeyboardButton("🔢 Send Code", callback_data=f"admin_sms_{user_id}"),
+            InlineKeyboardButton("💬 Message User", callback_data=f"msg_user_{user_id}")
+        ]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 def get_admin_sms_keyboard(user_id):
@@ -47,7 +53,10 @@ def get_admin_main_keyboard():
         [InlineKeyboardButton("📁 File List", callback_data="admin_file_list")],
         [InlineKeyboardButton("➕ Upload New File", callback_data="admin_upload_file")],
         [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
-        [InlineKeyboardButton("🖼 Edit Welcome", callback_data="admin_edit_welcome")],
+        [
+            InlineKeyboardButton("🖼 Edit Welcome Img", callback_data="admin_edit_welcome_img"),
+            InlineKeyboardButton("📝 Edit Welcome Text", callback_data="admin_edit_welcome_text")
+        ],
         [InlineKeyboardButton("⏱ Global Cooldown", callback_data="admin_global_cooldown")],
         [InlineKeyboardButton("📊 Stats", callback_data="admin_stats")]
     ]
